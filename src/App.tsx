@@ -5,6 +5,7 @@ import type { LatLngExpression } from "leaflet";
 import MarkerClusterGroup from "react-leaflet-cluster";
 import L from "leaflet";
 import "./App.css";
+import logo from "./assets/LOGO 2.png";
 
 type Hydrant = {
   id: string;
@@ -353,10 +354,10 @@ return (
     <header className="top-navbar">
       <div className="brand">
         <div className="brand-icon">
-          <img 
-            src="/src/assets/LOGO 2.png" 
-            alt="Brand Logo" 
-            style={{ width: '60px', height: 'auto' }} 
+          <img
+            src={logo}
+            alt="Brand Logo"
+            style={{ width: "60px", height: "auto" }}
           />
         </div>
         <div>

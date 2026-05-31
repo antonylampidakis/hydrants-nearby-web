@@ -1,0 +1,547 @@
+html,
+body,
+#root {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+}
+
+body {
+  overflow: hidden;
+  font-family: Arial, Helvetica, sans-serif;
+  background: #07111f;
+  color: #ffffff;
+}
+
+.app-shell {
+  width: 100vw;
+  height: 100vh;
+  background: #07111f;
+  display: flex;
+  flex-direction: column;
+}
+
+.top-navbar {
+  height: 72px;
+  background: #0b1422;
+  border-bottom: 1px solid #15253a;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 18px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.brand-icon {
+  font-size: 32px;
+}
+
+.brand-title {
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+}
+
+.brand-subtitle {
+  font-size: 12px;
+  color: #8ea2ba;
+}
+
+.nav-tabs {
+  display: flex;
+  gap: 8px;
+}
+
+.nav-tabs button,
+.status-bar button {
+  background: transparent;
+  border: 1px solid transparent;
+  color: #d6e4f5;
+  padding: 8px 14px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.nav-tabs button.active {
+  background: #1591e8;
+  color: white;
+}
+
+.top-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 14px;
+}
+
+.risk-low {
+  background: #00d11f;
+  color: #001900;
+  padding: 5px 36px;
+  border-radius: 3px;
+}
+
+.status-bar {
+  height: 34px;
+  background: #040a13;
+  border-bottom: 1px solid #142238;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  font-size: 14px;
+}
+
+.status-bar button {
+  background: #071d35;
+  padding: 3px 10px;
+}
+
+.total-count {
+  margin-left: auto;
+  color: #76c7ff;
+}
+
+.dashboard-layout {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 50% 50%;
+  min-height: 0;
+}
+
+.left-panel,
+.map-panel {
+  min-width: 0;
+  min-height: 0;
+  position: relative;
+  border-right: 1px solid #15253a;
+}
+
+.left-panel {
+  background: #07111f;
+  padding: 36px 14px 14px;
+  overflow: hidden;
+}
+
+.map-panel {
+  background: #02060c;
+  padding-top: 36px;
+}
+
+.panel-tab,
+.map-tab {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 30px;
+  background: #0d4d86;
+  color: white;
+  padding: 6px 14px;
+  box-sizing: border-box;
+  font-weight: 700;
+  border-bottom-right-radius: 4px;
+}
+
+.filter-box {
+  border: 1px solid #168ee6;
+  border-radius: 4px;
+  padding: 12px;
+  margin-bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  font-size: 14px;
+}
+
+.legend::before {
+  content: "";
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+
+.legend.red::before {
+  background: #d80b0b;
+}
+
+.legend.yellow::before {
+  background: #d0a400;
+}
+
+.legend.green::before {
+  background: #35c92f;
+}
+
+.hydrants-table {
+  height: calc(100% - 120px);
+  overflow-y: auto;
+  font-size: 14px;
+  margin-top: 14px;
+}
+
+.table-header,
+.table-row {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 0.8fr 0.7fr 1.2fr;
+  gap: 10px;
+  align-items: center;
+}
+
+.table-header {
+  color: #ffffff;
+  font-weight: 800;
+  border-bottom: 1px solid #223752;
+  padding: 8px 10px;
+  font-size: 13px;
+}
+
+.table-row {
+  padding: 8px 10px;
+  background: #0b1627;
+  border-bottom: 1px solid #101f35;
+}
+
+.table-row:nth-child(even) {
+  background: #081222;
+}
+
+.table-row:hover {
+  background: #123457;
+}
+
+.map-container {
+  width: 100%;
+  height: 100%;
+}
+
+.leaflet-container {
+  background: #111;
+}
+
+.filter-box {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.filter-row {
+  display: grid;
+  grid-template-columns: 1.6fr 1fr 1fr 1fr;
+  gap: 10px;
+}
+
+.filter-row input,
+.filter-row select {
+  background: #061426;
+  border: 1px solid #1b6fa8;
+  color: white;
+  padding: 9px 10px;
+  border-radius: 4px;
+  outline: none;
+}
+
+.filter-row input::placeholder {
+  color: #8ea2ba;
+}
+
+.filter-row select {
+  cursor: pointer;
+}
+
+.filter-summary {
+  color: #76c7ff;
+  font-size: 13px;
+}
+
+.table-row {
+  cursor: pointer;
+}
+
+.status-ok {
+  color: #22c55e;
+  font-weight: 800;
+}
+
+.status-bad {
+  color: #ef4444;
+  font-weight: 800;
+}
+
+.status-warning {
+  color: #facc15;
+  font-weight: 800;
+}
+
+.status-unknown {
+  color: #94a3b8;
+  font-weight: 800;
+}
+
+.custom-hydrant-marker {
+  background: transparent;
+  border: none;
+}
+
+.marker-dot {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 3px solid white;
+  box-shadow: 0 0 8px rgba(0, 0, 0, 0.65);
+}
+
+.footer {
+  height: 36px;
+  background: #040a13;
+  border-top: 1px solid #15253a;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  padding: 0 15px;
+
+  color: #8ea2ba;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.footer-left,
+.footer-center,
+.footer-right {
+  display: flex;
+  align-items: center;
+}
+
+.footer-center {
+  color: #76c7ff;
+}
+
+.location-btn {
+  background: #0d4d86;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.location-btn:hover {
+  background: #1267b2;
+}
+
+.admin-btn {
+  background: #132238;
+  color: #dcecff;
+  border: 1px solid #2b6da3;
+  border-radius: 4px;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.admin-btn.active {
+  background: #ef4444;
+  border-color: #ff8a8a;
+  color: white;
+}
+
+.admin-panel {
+  position: fixed;
+
+  left: 200px;
+  top: 180px;
+
+  width: 520px;
+  max-height: 75vh;
+
+  overflow-y: auto;
+
+  z-index: 2000;
+  background: rgba(7, 17, 31, 0.92);
+  border: 1px solid #1591e8;
+  border-radius: 6px;
+
+  box-shadow: 0 0 24px rgba(0, 0, 0, 0.65);
+
+  color: white;
+
+  backdrop-filter: blur(8px);
+-webkit-backdrop-filter: blur(8px);
+}
+
+.admin-panel-header {
+  height: 42px;
+  background: #0d4d86;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 14px;
+}
+
+.admin-panel-header button {
+  background: transparent;
+  border: none;
+  color: white;
+  font-size: 24px;
+  cursor: pointer;
+}
+
+.admin-panel-body {
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.admin-panel-body label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 13px;
+  color: #a9c7e8;
+}
+
+.admin-panel-body input,
+.admin-panel-body select,
+.admin-panel-body textarea {
+  background: #061426;
+  border: 1px solid #1b6fa8;
+  color: white;
+  border-radius: 4px;
+  padding: 8px 10px;
+  outline: none;
+}
+
+.admin-panel-body textarea {
+  resize: vertical;
+  min-height: 70px;
+}
+
+.admin-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.checkbox-row {
+  flex-direction: row !important;
+  align-items: center;
+}
+
+.checkbox-row input {
+  width: auto;
+}
+
+.save-hydrant-btn {
+  margin-top: 8px;
+  background: #00b736;
+  border: none;
+  color: #001909;
+  padding: 10px;
+  border-radius: 4px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.save-hydrant-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.panel-disabled .hydrants-table {
+  filter: blur(2px);
+  opacity: 0.55;
+  pointer-events: none;
+  transition: all 0.25s ease;
+}
+
+.delete-hydrant-btn {
+  background: #7f1d1d;
+  border: 1px solid #ef4444;
+  color: white;
+  padding: 10px;
+  border-radius: 4px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.delete-hydrant-btn:hover {
+  background: #b91c1c;
+}
+
+.delete-hydrant-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.login-input {
+  background: #061426;
+  border: 1px solid #1b6fa8;
+  color: white;
+  padding: 7px 10px;
+  border-radius: 4px;
+  width: 160px;
+}
+
+.login-btn,
+.logout-btn {
+  background: #3fd811;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.admin-badge {
+  background: #00b736;
+  color: #001909;
+  padding: 6px 10px;
+  border-radius: 4px;
+  font-weight: 800;
+}
+
+.admin-mode-select {
+  background: #061426;
+  color: white;
+  border: 1px solid #1b6fa8;
+  border-radius: 4px;
+  padding: 8px 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.admin-mode-select:focus {
+  outline: none;
+  border-color: #1591e8;
+}
+
+.admin-mode-select option {
+  background: #061426;
+  color: white;
+}
+
+.export-btn {
+  background: #123457;
+  color: white;
+  border: 1px solid #1b8ddd;
+  border-radius: 4px;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.export-btn:hover {
+  background: #1591e8;
+}

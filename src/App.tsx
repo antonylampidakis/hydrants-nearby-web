@@ -13,7 +13,6 @@ type Hydrant = {
   lat: number;
   lng: number;
   status: string | null;
-  accessible: boolean | null;
   lastinspection: string | null;
   hassstorz: boolean | null;
   comments: string | null;
@@ -25,7 +24,7 @@ type NewHydrantForm = {
   lat: number;
   lng: number;
   status: string;
-  accessible: boolean;
+
   hassstorz: boolean;
   lastinspection: string;
   comments: string;
@@ -95,7 +94,6 @@ function App() {
   const [selectedPosition, setSelectedPosition] = useState<LatLngExpression | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
-  const [accessibleFilter, setAccessibleFilter] = useState("ALL");
   const [storzFilter, setStorzFilter] = useState("ALL");
   const markerRefs = useRef<Record<string, L.Marker>>({});
   const [adminMode, setAdminMode] = useState(false);
@@ -152,9 +150,7 @@ function App() {
     const matchesStatus =
       statusFilter === "ALL" || hydrant.status === statusFilter;
 
-    const matchesAccessible =
-      accessibleFilter === "ALL" ||
-      String(hydrant.accessible) === accessibleFilter;
+   
 
     const matchesStorz =
       storzFilter === "ALL" ||
@@ -163,11 +159,10 @@ function App() {
     return (
       matchesSearch &&
       matchesStatus &&
-      matchesAccessible &&
       matchesStorz
     );
   });
-}, [hydrants, searchTerm, statusFilter, accessibleFilter, storzFilter]);
+}, [hydrants, searchTerm, statusFilter,  storzFilter]);
 
 const handleMapClickForNewHydrant = (lat: number, lng: number) => {
   setNewHydrant({
@@ -175,7 +170,6 @@ const handleMapClickForNewHydrant = (lat: number, lng: number) => {
     lat,
     lng,
     status: "ΛΕΙΤΟΥΡΓΙΚΟΣ",
-    accessible: true,
     hassstorz: false,
     lastinspection: new Date().toISOString().slice(0, 10),
     comments: "",
@@ -197,7 +191,7 @@ const saveHydrant = async () => {
     lat: newHydrant.lat,
     lng: newHydrant.lng,
     status: newHydrant.status,
-    accessible: newHydrant.accessible,
+
     hassstorz: newHydrant.hassstorz,
     lastinspection: newHydrant.lastinspection || null,
     comments: newHydrant.comments || null,
@@ -256,7 +250,7 @@ const openEditHydrant = (hydrant: Hydrant) => {
     lat: hydrant.lat,
     lng: hydrant.lng,
     status: hydrant.status ?? "ΛΕΙΤΟΥΡΓΙΚΟΣ",
-    accessible: hydrant.accessible ?? true,
+
     hassstorz: hydrant.hassstorz ?? false,
     lastinspection: hydrant.lastinspection ?? "",
     comments: hydrant.comments ?? "",
@@ -319,7 +313,7 @@ const exportHydrantsToCSV = () => {
     "lat",
     "lng",
     "status",
-    "accessible",
+
     "hassstorz",
     "lastinspection",
     "comments",
@@ -447,14 +441,7 @@ return (
       <option value="ΕΚΤΟΣ ΛΕΙΤΟΥΡΓΙΑΣ">Εκτός λειτουργίας</option>
     </select>
 
-    <select
-      value={accessibleFilter}
-      onChange={(e) => setAccessibleFilter(e.target.value)}
-    >
-      <option value="ALL">Πρόσβαση: Όλα</option>
-      <option value="true">Πρόσβαση: Ναι</option>
-      <option value="false">Πρόσβαση: Όχι</option>
-    </select>
+    
 
     <select
       value={storzFilter}
@@ -530,16 +517,7 @@ return (
         />
       </label>
 
-      <label className="checkbox-row">
-        <input
-          type="checkbox"
-          checked={newHydrant.accessible}
-          onChange={(e) =>
-            setNewHydrant({ ...newHydrant, accessible: e.target.checked })
-          }
-        />
-        Προσβάσιμο
-      </label>
+      
 
       <label className="checkbox-row">
         <input
@@ -598,7 +576,7 @@ return (
           <div className="table-header">
             <span>ΟΝΟΜΑ</span>
             <span>STATUS</span>
-            <span>ACCESS</span>
+   
             <span>STORZ</span>
             <span>ΤΕΛ. ΕΛΕΓΧΟΣ</span>
           </div>
@@ -625,7 +603,7 @@ return (
              <span className={getStatusClass(hydrant.status)}>
                 {hydrant.status ?? "-"}
               </span>
-              <span>{hydrant.accessible ? "Ναι" : "Όχι"}</span>
+              
               <span>{hydrant.hassstorz ? "Ναι" : "Όχι"}</span>
               <span>{hydrant.lastinspection ?? "-"}</span>
             </div>
@@ -676,8 +654,7 @@ return (
                     <strong>{hydrant.name ?? "Unnamed hydrant"}</strong>
                     <br />
                     Status: {hydrant.status ?? "N/A"}
-                    <br />
-                    Accessible: {hydrant.accessible ? "Yes" : "No"}
+                
                     <br />
                     Has Storz: {hydrant.hassstorz ? "Yes" : "No"}
                     <br />

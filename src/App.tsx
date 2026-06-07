@@ -3,6 +3,7 @@ import { supabase } from "./lib/supabase";
 import { MapContainer, Marker, Popup, TileLayer, useMap, useMapEvents } from "react-leaflet";
 import type { LatLngExpression } from "leaflet";
 import MarkerClusterGroup from "react-leaflet-cluster";
+
 import L from "leaflet";
 import "./App.css";
 import logo from "./assets/LOGO 2.png";
@@ -14,6 +15,7 @@ type Hydrant = {
   lng: number;
   status: string | null;
   lastinspection: string | null;
+  municipality: string | null;
   hassstorz: boolean | null;
   comments: string | null;
   created_at: string;
@@ -24,7 +26,7 @@ type NewHydrantForm = {
   lat: number;
   lng: number;
   status: string;
-
+  municipality: string | null;
   hassstorz: boolean;
   lastinspection: string;
   comments: string;
@@ -104,6 +106,11 @@ function App() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [adminView, setAdminView] = useState<"operator" | "management">("operator");
+  const [municipalityFilter, setMunicipalityFilter] = useState("ALL");
+  const [customMunicipality, setCustomMunicipality] = useState(false);
+
+  const [addressSearch, setAddressSearch] = useState("");
+  const [searchingAddress, setSearchingAddress] = useState(false);
 
   useEffect(() => {
     const loadHydrants = async () => {
@@ -142,6 +149,16 @@ function App() {
     setAdminMode(adminView === "management");
   }, [adminView]);
 
+  const municipalities = useMemo(() => {
+  return Array.from(
+    new Set(
+      hydrants
+        .map((hydrant) => hydrant.municipality)
+        .filter((municipality): municipality is string => Boolean(municipality))
+    )
+  ).sort((a, b) => a.localeCompare(b, "el"));
+}, [hydrants]);
+
  const filteredHydrants = useMemo(() => {
   return hydrants.filter((hydrant) => {
     const matchesSearch =
@@ -150,6 +167,9 @@ function App() {
     const matchesStatus =
       statusFilter === "ALL" || hydrant.status === statusFilter;
 
+    const matchesMunicipality =
+  municipalityFilter === "ALL" ||
+  hydrant.municipality === municipalityFilter;
    
 
     const matchesStorz =
@@ -159,10 +179,11 @@ function App() {
     return (
       matchesSearch &&
       matchesStatus &&
+      matchesMunicipality &&
       matchesStorz
     );
   });
-}, [hydrants, searchTerm, statusFilter,  storzFilter]);
+}, [hydrants, searchTerm, statusFilter,municipalityFilter,  storzFilter]);
 
 const handleMapClickForNewHydrant = (lat: number, lng: number) => {
   setNewHydrant({
@@ -170,17 +191,25 @@ const handleMapClickForNewHydrant = (lat: number, lng: number) => {
     lat,
     lng,
     status: "ΛΕΙΤΟΥΡΓΙΚΟΣ",
+    municipality: "",
+    
     hassstorz: false,
     lastinspection: new Date().toISOString().slice(0, 10),
     comments: "",
   });
+  setCustomMunicipality(false);
 };
 
 const saveHydrant = async () => {
   if (!newHydrant) return;
 
   if (!newHydrant.name.trim()) {
-    alert("Συμπλήρωσε όνομα υδροστομίου.");
+    alert("Συμπλήρωσε Διεύθυνση υδροστομίου.");
+    return;
+  }
+
+  if (!(newHydrant.municipality ?? "").trim()) {
+    alert("Συμπλήρωσε Δήμο.");
     return;
   }
 
@@ -191,7 +220,8 @@ const saveHydrant = async () => {
     lat: newHydrant.lat,
     lng: newHydrant.lng,
     status: newHydrant.status,
-
+    municipality: newHydrant.municipality || null,
+    accessible: true,
     hassstorz: newHydrant.hassstorz,
     lastinspection: newHydrant.lastinspection || null,
     comments: newHydrant.comments || null,
@@ -221,6 +251,7 @@ const saveHydrant = async () => {
     setEditingHydrantId(null);
     setNewHydrant(null);
     setSavingHydrant(false);
+    setCustomMunicipality(false);
     return;
   }
 
@@ -250,12 +281,13 @@ const openEditHydrant = (hydrant: Hydrant) => {
     lat: hydrant.lat,
     lng: hydrant.lng,
     status: hydrant.status ?? "ΛΕΙΤΟΥΡΓΙΚΟΣ",
-
+    municipality: hydrant.municipality ?? "",
     hassstorz: hydrant.hassstorz ?? false,
     lastinspection: hydrant.lastinspection ?? "",
     comments: hydrant.comments ?? "",
   });
-
+  
+  setCustomMunicipality(false);
   setSelectedPosition([hydrant.lat, hydrant.lng]);
 };
 
@@ -343,6 +375,94 @@ const exportHydrantsToCSV = () => {
   URL.revokeObjectURL(url);
 };
 
+const searchAddressForHydrant = async () => {
+  if (!addressSearch.trim()) {
+    alert("Συμπλήρωσε διεύθυνση.");
+    return;
+  }
+
+  setSearchingAddress(true);
+
+  try {
+    const query = addressSearch.includes("Ελλάδα")
+  ? addressSearch
+  : `${addressSearch}, Ελλάδα`;
+
+    const url =
+      `https://nominatim.openstreetmap.org/search` +
+      `?format=jsonv2&q=${encodeURIComponent(query)}` +
+      `&limit=1&addressdetails=1&accept-language=el`;
+
+    const response = await fetch(url, {
+      headers: {
+        "Accept-Language": "el",
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error("Απέτυχε η αναζήτηση διεύθυνσης.");
+    }
+
+    const results = await response.json();
+
+    console.log("QUERY:", query);
+    console.log("RESULTS:", results);
+
+    if (!results.length) {
+      alert("Δεν βρέθηκε η διεύθυνση.");
+      return;
+    }
+
+    const result = results[0];
+
+    const lat = Number(result.lat);
+    const lng = Number(result.lon);
+
+    setNewHydrant({
+      name: addressSearch,
+      lat,
+      lng,
+      status: "ΛΕΙΤΟΥΡΓΙΚΟΣ",
+      municipality:
+        result.address?.municipality ||
+        result.address?.city ||
+        result.address?.town ||
+        result.address?.suburb ||
+        "",
+      hassstorz: false,
+      lastinspection: new Date().toISOString().slice(0, 10),
+      comments: "",
+    });
+
+    setEditingHydrantId(null);
+    setCustomMunicipality(false);
+    setSelectedPosition([lat, lng]);
+  } catch (error) {
+    console.error(error);
+    alert("Προέκυψε σφάλμα κατά την αναζήτηση.");
+  } finally {
+    setSearchingAddress(false);
+  }
+};
+
+const startAddHydrant = () => {
+  setEditingHydrantId(null);
+
+  setNewHydrant({
+    name: "",
+    lat: 37.9838,
+    lng: 23.7275,
+    status: "ΛΕΙΤΟΥΡΓΙΚΟΣ",
+    municipality: "",
+    hassstorz: false,
+    lastinspection: new Date().toISOString().slice(0, 10),
+    comments: "",
+  });
+
+  setAddressSearch("");
+  setCustomMunicipality(false);
+};
+
 return (
   <div className="app-shell">
     <header className="top-navbar">
@@ -417,8 +537,6 @@ return (
       </div>
     </header>
 
-   
-
     <main className="dashboard-layout">
       <aside className={`left-panel ${newHydrant ? "panel-disabled" : ""}`}>
         
@@ -432,11 +550,25 @@ return (
       onChange={(e) => setSearchTerm(e.target.value)}
     />
 
+        <select
+      value={municipalityFilter}
+      onChange={(e) => setMunicipalityFilter(e.target.value)}
+    >
+      <option value="ALL">Όλοι οι Δήμοι</option>
+
+      {municipalities.map((municipality) => (
+        <option key={municipality} value={municipality}>
+          {municipality}
+        </option>
+      ))}
+    </select>
+
+
     <select
       value={statusFilter}
       onChange={(e) => setStatusFilter(e.target.value)}
     >
-      <option value="ALL">Όλα τα status</option>
+      <option value="ALL">Όλες οι καταστάσεις</option>
       <option value="ΛΕΙΤΟΥΡΓΙΚΟΣ">Λειτουργικός</option>
       <option value="ΕΚΤΟΣ ΛΕΙΤΟΥΡΓΙΑΣ">Εκτός λειτουργίας</option>
     </select>
@@ -469,8 +601,31 @@ return (
     </div>
 
     <div className="admin-panel-body">
+      {!editingHydrantId && (
+        <div className="address-search-box">
+          <label>
+            Αναζήτηση με διεύθυνση
+            <input
+              type="text"
+              value={addressSearch}
+              onChange={(e) => setAddressSearch(e.target.value)}
+              placeholder="π.χ. Μεσογείων 100, Αθήνα"
+            />
+          </label>
+
+          <button
+            type="button"
+            className="address-search-btn"
+            onClick={searchAddressForHydrant}
+            disabled={searchingAddress}
+          >
+            {searchingAddress ? "Αναζήτηση..." : "Εύρεση στο χάρτη"}
+          </button>
+        </div>
+      )}
+      
       <label>
-        Όνομα
+        Διεύθυνση
         <input
           type="text"
           value={newHydrant.name}
@@ -479,6 +634,56 @@ return (
           }
         />
       </label>
+      
+      <label>
+  Δήμος
+  <select
+    value={customMunicipality ? "__CUSTOM__" : newHydrant.municipality ?? ""}
+    onChange={(e) => {
+      if (e.target.value === "__CUSTOM__") {
+        setCustomMunicipality(true);
+        setNewHydrant({
+          ...newHydrant,
+          municipality: "",
+        });
+        return;
+      }
+
+      setCustomMunicipality(false);
+      setNewHydrant({
+        ...newHydrant,
+        municipality: e.target.value,
+      });
+    }}
+  >
+    <option value="">Επιλογή Δήμου</option>
+
+    {municipalities.map((municipality) => (
+      <option key={municipality} value={municipality}>
+        {municipality}
+      </option>
+    ))}
+
+    <option value="__CUSTOM__">Άλλος Δήμος...</option>
+  </select>
+</label>
+
+      {customMunicipality && (
+        <label>
+          Νέος Δήμος
+          <input
+            type="text"
+            value={newHydrant.municipality ?? ""}
+            onChange={(e) =>
+              setNewHydrant({
+                ...newHydrant,
+                municipality: e.target.value,
+              })
+            }
+            placeholder="Πληκτρολόγησε δήμο"
+          />
+        </label>
+      )}
 
       <div className="admin-grid">
         <label>
@@ -574,9 +779,10 @@ return (
 
         <div className="hydrants-table">
           <div className="table-header">
-            <span>ΟΝΟΜΑ</span>
-            <span>STATUS</span>
-   
+            <span>ΔΙΕΥΘΥΝΣΗ</span>
+            <span>ΔΗΜΟΣ</span>
+            <span>ΚΑΤΑΣΤΑΣΗ</span>
+            
             <span>STORZ</span>
             <span>ΤΕΛ. ΕΛΕΓΧΟΣ</span>
           </div>
@@ -600,6 +806,7 @@ return (
               }}
             >
               <span>{hydrant.name ?? "-"}</span>
+              <span>{hydrant.municipality ?? "-"}</span>
              <span className={getStatusClass(hydrant.status)}>
                 {hydrant.status ?? "-"}
               </span>
@@ -612,8 +819,20 @@ return (
       </aside>
 
       <section className="map-panel">
-        <div className="map-tab">Χάρτης</div>
+        <div className="map-header">
+          <div className="map-tab">
+            Χάρτης
+          </div>
 
+          {adminMode && (
+            <button
+              className="new-hydrant-map-btn"
+              onClick={startAddHydrant}
+            >
+              Νέος Κρουνός
+            </button>
+          )}
+        </div>
         <MapContainer
           center={[37.9838, 23.7275]}
           zoom={12}
@@ -653,6 +872,8 @@ return (
                   <Popup>
                     <strong>{hydrant.name ?? "Unnamed hydrant"}</strong>
                     <br />
+                    Δήμος: {hydrant.municipality ?? "N/A"}
+                    <br />
                     Status: {hydrant.status ?? "N/A"}
                 
                     <br />
@@ -671,17 +892,27 @@ return (
     </main>
 
 <footer className="footer">
+
   <div className="footer-left">
-    
+    HydrantsNearby © 2026
   </div>
 
   <div className="footer-center">
-     HydrantsNearby © 2026
+    <a href="/help.html#usage">Όροι Χρήσης</a>
+
+    <span style={{ margin: "0 8px" }}>|</span>
+
+    <a href="/help.html#privacy">Πολιτική Απορρήτου</a>
+
+    <span style={{ margin: "0 8px" }}>|</span>
+
+    <a href="/help.html#help">Βοήθεια</a>
   </div>
 
   <div className="footer-right">
     Version 2.0.0
   </div>
+
 </footer>
 
 </div>

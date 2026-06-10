@@ -3,10 +3,22 @@ import { supabase } from "./lib/supabase";
 import { MapContainer, Marker, Popup, TileLayer, useMap, useMapEvents } from "react-leaflet";
 import type { LatLngExpression } from "leaflet";
 import MarkerClusterGroup from "react-leaflet-cluster";
-
 import L from "leaflet";
 import "./App.css";
 import logo from "./assets/LOGO 2.png";
+
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+  Legend,
+} from "recharts";
 
 type Hydrant = {
   id: string;
@@ -30,6 +42,35 @@ type NewHydrantForm = {
   hassstorz: boolean;
   lastinspection: string;
   comments: string;
+};
+
+type HydrantSubmissionForm = {
+  name: string;
+  lat: number;
+  lng: number;
+  municipality: string;
+  status: string;
+  hassstorz: boolean;
+  lastinspection: string;
+  comments: string;
+  user_notes: string;
+};
+
+type HydrantSubmission = {
+  id: string;
+  type: "add" | "edit";
+  hydrant_id: string | null;
+  name: string | null;
+  lat: number | null;
+  lng: number | null;
+  municipality: string | null;
+  status: string | null;
+  hassstorz: boolean | null;
+  lastinspection: string | null;
+  comments: string | null;
+  user_notes: string | null;
+  submission_status: "pending" | "approved" | "rejected";
+  created_at: string;
 };
 
 const getStatusClass = (status: string | null) => {
@@ -90,9 +131,113 @@ function MapClickHandler({
   return null;
 }
 
+const getSubmissionClientToken = () => {
+  const storageKey = "hydrantsnearby_submission_token";
+
+  const existingToken = localStorage.getItem(storageKey);
+
+  if (existingToken) {
+    return existingToken;
+  }
+
+  const newToken =
+    crypto.randomUUID?.() ??
+    `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+  localStorage.setItem(storageKey, newToken);
+
+  return newToken;
+};
+
+const isValidLatLng = (lat: number, lng: number) => {
+  return (
+    Number.isFinite(lat) &&
+    Number.isFinite(lng) &&
+    lat >= -90 &&
+    lat <= 90 &&
+    lng >= -180 &&
+    lng <= 180
+  );
+};
+
+const normalizeMunicipality = (value: string | null | undefined) => {
+  return (value ?? "")
+    .replace(/^Δήμος\s+/i, "")
+    .trim()
+    .toLowerCase();
+};
+
+const getMunicipalityFromCoordinates = async (lat: number, lng: number) => {
+  const url =
+    `https://nominatim.openstreetmap.org/reverse` +
+    `?format=jsonv2&lat=${lat}&lon=${lng}&addressdetails=1&accept-language=el`;
+
+  const response = await fetch(url);
+
+  if (!response.ok) {
+    throw new Error("Απέτυχε ο έλεγχος δήμου από συντεταγμένες.");
+  }
+
+  const result = await response.json();
+  const address = result.address ?? {};
+
+  return (
+    address.municipality ||
+    address.city ||
+    address.town ||
+    address.village ||
+    address.suburb ||
+    address.city_district ||
+    ""
+  );
+};
+
+const getDistanceMeters = (
+  lat1: number,
+  lng1: number,
+  lat2: number,
+  lng2: number
+) => {
+  const earthRadius = 6371000;
+
+  const toRad = (value: number) => (value * Math.PI) / 180;
+
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) *
+      Math.cos(toRad(lat2)) *
+      Math.sin(dLng / 2) ** 2;
+
+  return earthRadius * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+};
+
+const findNearbyHydrant = (
+  hydrants: Hydrant[],
+  lat: number,
+  lng: number,
+  maxDistanceMeters = 8
+) => {
+  let nearest: { hydrant: Hydrant; distance: number } | null = null;
+
+  for (const hydrant of hydrants) {
+    const distance = getDistanceMeters(lat, lng, hydrant.lat, hydrant.lng);
+
+    if (distance <= maxDistanceMeters) {
+      if (!nearest || distance < nearest.distance) {
+        nearest = { hydrant, distance };
+      }
+    }
+  }
+
+  return nearest;
+};
+
 function App() {
   const [hydrants, setHydrants] = useState<Hydrant[]>([]);
-
+  const [isAdmin, setIsAdmin] = useState(false);
   const [selectedPosition, setSelectedPosition] = useState<LatLngExpression | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
@@ -105,12 +250,36 @@ function App() {
   const [session, setSession] = useState<any>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [adminView, setAdminView] = useState<"operator" | "management">("operator");
+const [adminView, setAdminView] = useState<
+  "operator" | "management" | "submissions" | "statistics"
+>("operator");
   const [municipalityFilter, setMunicipalityFilter] = useState("ALL");
   const [customMunicipality, setCustomMunicipality] = useState(false);
+  const [submissionType, setSubmissionType] = useState<"add" | "edit">("add");
+  const [submissionHydrantId, setSubmissionHydrantId] = useState<string | null>(null);
+  const [selectedSubmission, setSelectedSubmission] =
+  useState<HydrantSubmission | null>(null);
+  const [reviewingSubmission, setReviewingSubmission] = useState(false);
 
   const [addressSearch, setAddressSearch] = useState("");
   const [searchingAddress, setSearchingAddress] = useState(false);
+  const [originalHydrant, setOriginalHydrant] = useState<Hydrant | null>(null);
+  const [submissions, setSubmissions] = useState<HydrantSubmission[]>([]);
+  const [loadingSubmissions, setLoadingSubmissions] = useState(false);
+
+  const [showSubmissionPanel, setShowSubmissionPanel] = useState(false);
+  const [submissionForm, setSubmissionForm] = useState<HydrantSubmissionForm>({
+    name: "",
+    lat: 37.9838,
+    lng: 23.7275,
+    municipality: "",
+    status: "ΛΕΙΤΟΥΡΓΙΚΟΣ",
+    hassstorz: false,
+    lastinspection: new Date().toISOString().slice(0, 10),
+    comments: "",
+    user_notes: "",
+  });
+  const [savingSubmission, setSavingSubmission] = useState(false);
 
   useEffect(() => {
     const loadHydrants = async () => {
@@ -133,14 +302,25 @@ function App() {
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-    });
+  setSession(data.session);
+
+  if (data.session) {
+    checkAdminRole();
+  }
+});
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-    });
+  setSession(session);
+
+  if (session) {
+    checkAdminRole();
+  } else {
+    setIsAdmin(false);
+    setAdminView("operator");
+  }
+});
 
     return () => subscription.unsubscribe();
   }, []);
@@ -148,6 +328,14 @@ function App() {
   useEffect(() => {
     setAdminMode(adminView === "management");
   }, [adminView]);
+
+
+  useEffect(() => {
+    if (adminView === "submissions" && session) {
+      loadPendingSubmissions();
+    }
+  }, [adminView, session]);
+
 
   const municipalities = useMemo(() => {
   return Array.from(
@@ -215,12 +403,77 @@ const saveHydrant = async () => {
 
   setSavingHydrant(true);
 
+  let finalMunicipality = newHydrant.municipality ?? "";
+
+  if (!isValidLatLng(newHydrant.lat, newHydrant.lng)) {
+    alert("Οι συντεταγμένες δεν είναι έγκυρες.");
+    return;
+  }
+
+  try {
+    const detectedMunicipality = await getMunicipalityFromCoordinates(
+      newHydrant.lat,
+      newHydrant.lng
+    );
+
+    const selectedMunicipality = normalizeMunicipality(newHydrant.municipality);
+    const detectedNormalized = normalizeMunicipality(detectedMunicipality);
+
+    if (detectedNormalized && selectedMunicipality !== detectedNormalized) {
+      const confirmed = window.confirm(
+        `Ο δήμος που έχεις επιλέξει είναι "${newHydrant.municipality}", αλλά από τις συντεταγμένες προκύπτει "${detectedMunicipality}".\n\nΘέλεις να χρησιμοποιηθεί ο δήμος "${detectedMunicipality}";`
+      );
+
+      if (!confirmed) {
+        setSavingHydrant(false);
+        return;
+      }
+
+      finalMunicipality = detectedMunicipality.replace(/^Δήμος\s+/i, "").trim();
+    }
+  } catch (error) {
+    console.error(error);
+
+    const confirmed = window.confirm(
+      "Δεν ήταν δυνατή η επιβεβαίωση του δήμου από τις συντεταγμένες. Θέλεις να συνεχίσεις;"
+    );
+
+    if (!confirmed) {
+      setSavingHydrant(false);
+      return;
+    }
+  }
+
+  if (!editingHydrantId) {
+  const nearbyHydrant = findNearbyHydrant(
+    hydrants,
+    newHydrant.lat,
+    newHydrant.lng,
+    8
+  );
+
+  if (nearbyHydrant) {
+    const confirmed = window.confirm(
+      `Υπάρχει ήδη κρουνός πολύ κοντά σε αυτό το σημείο:\n\n` +
+       `${nearbyHydrant.hydrant.name ?? "Χωρίς όνομα"}\n` +
+        `Δήμος: ${nearbyHydrant.hydrant.municipality ?? "-"}\n` +
+          `Απόσταση: ${nearbyHydrant.distance.toFixed(1)} μέτρα\n\n` +
+        `Θέλεις να συνεχίσεις την προσθήκη;`
+    );
+
+    if (!confirmed) {
+      setSavingHydrant(false);
+      return;
+    }
+  }
+}
+
   const payload = {
     name: newHydrant.name,
     lat: newHydrant.lat,
     lng: newHydrant.lng,
     status: newHydrant.status,
-    municipality: newHydrant.municipality || null,
+    municipality: finalMunicipality || null,
     accessible: true,
     hassstorz: newHydrant.hassstorz,
     lastinspection: newHydrant.lastinspection || null,
@@ -335,6 +588,8 @@ const login = async () => {
 };
 
 const logout = async () => {
+  setIsAdmin(false);
+setAdminView("operator");
   await supabase.auth.signOut();
 };
 
@@ -463,6 +718,332 @@ const startAddHydrant = () => {
   setCustomMunicipality(false);
 };
 
+const submitHydrantSuggestion = async () => {
+  if (!submissionForm.name.trim()) {
+    alert("Συμπλήρωσε διεύθυνση ή όνομα κρουνού.");
+    return;
+  }
+
+  if (!submissionForm.municipality.trim()) {
+    alert("Συμπλήρωσε Δήμο.");
+    return;
+  }
+
+  setSavingSubmission(true); 
+
+  let finalMunicipality = submissionForm.municipality;
+
+if (!isValidLatLng(submissionForm.lat, submissionForm.lng)) {
+  alert("Οι συντεταγμένες δεν είναι έγκυρες.");
+  return;
+}
+
+try {
+  const detectedMunicipality = await getMunicipalityFromCoordinates(
+    submissionForm.lat,
+    submissionForm.lng
+  );
+
+  const selectedMunicipality = normalizeMunicipality(submissionForm.municipality);
+  const detectedNormalized = normalizeMunicipality(detectedMunicipality);
+
+  if (detectedNormalized && selectedMunicipality !== detectedNormalized) {
+    const confirmed = window.confirm(
+      `Ο δήμος που δήλωσες είναι "${submissionForm.municipality}", αλλά από τις συντεταγμένες προκύπτει "${detectedMunicipality}".\n\nΘέλεις να χρησιμοποιηθεί ο δήμος "${detectedMunicipality}";`
+    );
+
+    if (!confirmed) {
+      setSavingSubmission(false);
+      return;
+    }
+
+    finalMunicipality = detectedMunicipality.replace(/^Δήμος\s+/i, "").trim();
+  }
+} catch (error) {
+  console.error(error);
+
+  const confirmed = window.confirm(
+    "Δεν ήταν δυνατή η επιβεβαίωση του δήμου από τις συντεταγμένες. Θέλεις να συνεχίσεις;"
+  );
+
+  if (!confirmed) {
+    setSavingSubmission(false);
+    return;
+  }
+}
+
+  const { error } = await supabase.from("hydrant_submissions").insert({
+   type: submissionType,
+    hydrant_id: submissionHydrantId,
+    name: submissionForm.name,
+    lat: submissionForm.lat,
+    lng: submissionForm.lng,
+    municipality: finalMunicipality,
+    status: submissionForm.status,
+    hassstorz: submissionForm.hassstorz,
+    lastinspection: submissionForm.lastinspection || null,
+    comments: submissionForm.comments || null,
+    user_notes: submissionForm.user_notes || null,
+    submission_status: "pending",
+    client_token: getSubmissionClientToken(),
+  });
+
+  setSavingSubmission(false);
+
+  if (error) {
+      console.error(error);
+
+      if (
+        error.message.includes("row-level security") ||
+        error.message.includes("violates row-level security")
+      ) {
+        alert("Έχεις φτάσει το όριο των 5 υποβολών ανά ώρα.");
+      } else {
+        alert("Απέτυχε η υποβολή.");
+      }
+
+      return;
+    }
+
+  alert("Η υποβολή στάλθηκε για έλεγχο.");
+
+  setShowSubmissionPanel(false);
+  setSubmissionForm({
+    name: "",
+    lat: 37.9838,
+    lng: 23.7275,
+    municipality: "",
+    status: "ΛΕΙΤΟΥΡΓΙΚΟΣ",
+    hassstorz: false,
+    lastinspection: new Date().toISOString().slice(0, 10),
+    comments: "",
+    user_notes: "",
+  });
+};
+
+const loadPendingSubmissions = async () => {
+  setLoadingSubmissions(true);
+
+  const { data, error } = await supabase
+    .from("hydrant_submissions")
+    .select("*")
+    .eq("submission_status", "pending")
+    .order("created_at", { ascending: false });
+
+  setLoadingSubmissions(false);
+
+  if (error) {
+    console.error(error);
+    alert("Απέτυχε η φόρτωση των υποβολών.");
+    return;
+  }
+
+  setSubmissions(data ?? []);
+};
+
+const approveSubmission = async (submission: HydrantSubmission) => {
+  if (reviewingSubmission) return;
+
+  const confirmed = window.confirm("Θέλεις να εγκρίνεις αυτή την υποβολή;");
+  if (!confirmed) return;
+
+  setReviewingSubmission(true);
+
+  if (
+  submission.type === "add" &&
+  submission.lat !== null &&
+  submission.lng !== null
+) {
+  const nearbyHydrant = findNearbyHydrant(
+    hydrants,
+    submission.lat,
+    submission.lng,
+    8
+  );
+
+  if (nearbyHydrant) {
+    const confirmed = window.confirm(
+      `Υπάρχει ήδη κρουνός πολύ κοντά σε αυτό το σημείο:\n\n` +
+        `${nearbyHydrant.hydrant.name ?? "Χωρίς όνομα"}\n` +
+        `Δήμος: ${nearbyHydrant.hydrant.municipality ?? "-"}\n` +
+          `Απόσταση: ${nearbyHydrant.distance.toFixed(1)} μέτρα\n\n` +
+        `Θέλεις να εγκρίνεις την υποβολή παρόλα αυτά;`
+    );
+
+    if (!confirmed) {
+      setReviewingSubmission(false);
+      return;
+    }
+  }
+}
+
+  const { error: insertError } = await supabase.from("hydrants").insert({
+    name: submission.name,
+    lat: submission.lat,
+    lng: submission.lng,
+    municipality: submission.municipality,
+    status: submission.status,
+    accessible: true,
+    hassstorz: submission.hassstorz,
+    lastinspection: submission.lastinspection,
+    comments: submission.comments,
+  });
+
+  if (insertError) {
+    console.error(insertError);
+    alert("Απέτυχε η δημιουργία κρουνού από την υποβολή.");
+    setReviewingSubmission(false);
+    return;
+  }
+
+  const { error: updateError } = await supabase
+    .from("hydrant_submissions")
+    .update({
+      submission_status: "approved",
+      reviewed_at: new Date().toISOString(),
+    })
+    .eq("id", submission.id);
+
+  if (updateError) {
+    console.error(updateError);
+    alert("Ο κρουνός δημιουργήθηκε, αλλά απέτυχε η ενημέρωση της υποβολής.");
+    setReviewingSubmission(false);
+    return;
+  }
+
+  setSubmissions((prev) => prev.filter((item) => item.id !== submission.id));
+  setSelectedSubmission(null);
+  setReviewingSubmission(false);
+
+  alert("Η υποβολή εγκρίθηκε.");
+};
+
+const rejectSubmission = async (submission: HydrantSubmission) => {
+  if (reviewingSubmission) return;
+
+  const confirmed = window.confirm("Θέλεις να απορρίψεις αυτή την υποβολή;");
+  if (!confirmed) return;
+
+  setReviewingSubmission(true);
+
+  const { error } = await supabase
+    .from("hydrant_submissions")
+    .update({
+      submission_status: "rejected",
+      reviewed_at: new Date().toISOString(),
+    })
+    .eq("id", submission.id);
+
+  if (error) {
+    console.error(error);
+    alert("Απέτυχε η απόρριψη της υποβολής.");
+    setReviewingSubmission(false);
+    return;
+  }
+
+  setSubmissions((prev) => prev.filter((item) => item.id !== submission.id));
+  setSelectedSubmission(null);
+  setReviewingSubmission(false);
+
+  alert("Η υποβολή απορρίφθηκε.");
+};
+
+const openEditSuggestion = (hydrant: Hydrant) => {
+  setSubmissionForm({
+    name: hydrant.name ?? "",
+    lat: hydrant.lat,
+    lng: hydrant.lng,
+    municipality: hydrant.municipality ?? "",
+    status: hydrant.status ?? "ΛΕΙΤΟΥΡΓΙΚΟΣ",
+    hassstorz: hydrant.hassstorz ?? false,
+    lastinspection: hydrant.lastinspection ?? new Date().toISOString().slice(0, 10),
+    comments: hydrant.comments ?? "",
+    user_notes: "",
+  });
+
+  setSubmissionType("edit");
+  setSubmissionHydrantId(hydrant.id);
+  setShowSubmissionPanel(true);
+};
+
+const checkAdminRole = async () => {
+  const { data: sessionData } = await supabase.auth.getSession();
+
+  const userId = sessionData.session?.user.id;
+
+  if (!userId) {
+    setIsAdmin(false);
+    return;
+  }
+
+  const { data, error } = await supabase
+    .from("admin_users")
+    .select("role")
+    .eq("user_id", userId)
+    .eq("role", "admin")
+    .single();
+
+  if (error || !data) {
+    setIsAdmin(false);
+    setAdminView("operator");
+    return;
+  }
+
+    setIsAdmin(true);
+    setAdminView("management");
+};
+
+const municipalityStats = useMemo(() => {
+  const counts = new Map<string, number>();
+
+  hydrants.forEach((hydrant) => {
+    const municipality = hydrant.municipality || "Άγνωστο";
+    counts.set(municipality, (counts.get(municipality) ?? 0) + 1);
+  });
+
+  return Array.from(counts.entries())
+    .map(([municipality, count]) => ({
+      municipality,
+      count,
+    }))
+    .sort((a, b) => b.count - a.count);
+}, [hydrants]);
+
+const statusStats = useMemo(() => {
+  const counts = new Map<string, number>();
+
+  hydrants.forEach((hydrant) => {
+    const status = hydrant.status || "Άγνωστο";
+    counts.set(status, (counts.get(status) ?? 0) + 1);
+  });
+
+  return Array.from(counts.entries()).map(([name, value]) => ({
+    name,
+    value,
+  }));
+}, [hydrants]);
+
+const storzStats = useMemo(() => {
+  const withStorz = hydrants.filter((hydrant) => hydrant.hassstorz).length;
+  const withoutStorz = hydrants.length - withStorz;
+
+  return [
+    { name: "Με Storz", value: withStorz },
+    { name: "Χωρίς Storz", value: withoutStorz },
+  ];
+}, [hydrants]);
+
+const totalHydrants = hydrants.length;
+const workingHydrants = hydrants.filter(
+  (hydrant) => hydrant.status === "ΛΕΙΤΟΥΡΓΙΚΟΣ"
+).length;
+const problemHydrants = hydrants.filter(
+  (hydrant) => hydrant.status === "ΜΕ ΠΡΟΒΛΗΜΑ"
+).length;
+const outOfServiceHydrants = hydrants.filter(
+  (hydrant) => hydrant.status === "ΕΚΤΟΣ ΛΕΙΤΟΥΡΓΙΑΣ"
+).length;
+
 return (
   <div className="app-shell">
     <header className="top-navbar">
@@ -507,20 +1088,23 @@ return (
           </>
         ) : (
           <>
-           {session && (
+           {isAdmin && (
           <select
             className="admin-mode-select"
             value={adminView}
             onChange={(e) =>
-              setAdminView(e.target.value as "operator" | "management")
+              setAdminView(
+                e.target.value as "operator" | "management" | "submissions" | "statistics"
+              )
             }
           >
-            <option value="operator">Χειριστής</option>
-            <option value="management">Διαχείριση</option>
+           <option value="operator">Χειριστής</option>
+          <option value="management">Διαχείριστης</option>
+          
           </select>
         )}
 
-        {session && (
+        {isAdmin && (
           <button className="export-btn" onClick={exportHydrantsToCSV}>
             Export CSV
           </button>
@@ -532,7 +1116,19 @@ return (
           </>
         )}
 
-        
+        {!session && (
+          <button
+            type="button"
+            className="submit-suggestion-btn"
+            onClick={() => {
+              setSubmissionType("add");
+              setSubmissionHydrantId(null);
+              setShowSubmissionPanel(true);
+            }}
+          >
+            Υποβολή Κρουνού
+          </button>
+        )}
         
       </div>
     </header>
@@ -768,6 +1364,140 @@ return (
         </button>
       )}
     </div>
+
+
+  </div>
+
+  
+)}
+
+    {showSubmissionPanel && (
+  <div className="admin-panel">
+    <div className="admin-panel-header">
+     <strong>
+        {submissionType === "add"
+          ? "Υποβολή Νέου Κρουνού"
+          : "Πρόταση Τροποποίησης Κρουνού"}
+      </strong>
+      <button onClick={() => setShowSubmissionPanel(false)}>×</button>
+    </div>
+
+    <div className="admin-panel-body">
+      <label>
+        Διεύθυνση / Όνομα
+        <input
+          value={submissionForm.name}
+          onChange={(e) =>
+            setSubmissionForm({ ...submissionForm, name: e.target.value })
+          }
+        />
+      </label>
+
+      <label>
+        Δήμος
+        <input
+          value={submissionForm.municipality}
+          onChange={(e) =>
+            setSubmissionForm({
+              ...submissionForm,
+              municipality: e.target.value,
+            })
+          }
+        />
+      </label>
+
+      <div className="admin-grid">
+        <label>
+          Latitude
+          <input
+            type="number"
+            value={submissionForm.lat}
+            onChange={(e) =>
+              setSubmissionForm({
+                ...submissionForm,
+                lat: Number(e.target.value),
+              })
+            }
+          />
+        </label>
+
+        <label>
+          Longitude
+          <input
+            type="number"
+            value={submissionForm.lng}
+            onChange={(e) =>
+              setSubmissionForm({
+                ...submissionForm,
+                lng: Number(e.target.value),
+              })
+            }
+          />
+        </label>
+      </div>
+
+      <label>
+        Κατάσταση
+        <select
+          value={submissionForm.status}
+          onChange={(e) =>
+            setSubmissionForm({ ...submissionForm, status: e.target.value })
+          }
+        >
+          <option value="ΛΕΙΤΟΥΡΓΙΚΟΣ">Λειτουργικός</option>
+          <option value="ΜΕ ΠΡΟΒΛΗΜΑ">Με πρόβλημα</option>
+          <option value="ΕΚΤΟΣ ΛΕΙΤΟΥΡΓΙΑΣ">Εκτός λειτουργίας</option>
+        </select>
+      </label>
+
+      <label className="checkbox-row">
+        <input
+          type="checkbox"
+          checked={submissionForm.hassstorz}
+          onChange={(e) =>
+            setSubmissionForm({
+              ...submissionForm,
+              hassstorz: e.target.checked,
+            })
+          }
+        />
+        Διαθέτει Storz
+      </label>
+
+      <label>
+        Σχόλια
+        <textarea
+          value={submissionForm.comments}
+          onChange={(e) =>
+            setSubmissionForm({
+              ...submissionForm,
+              comments: e.target.value,
+            })
+          }
+        />
+      </label>
+
+      <label>
+        Παρατηρήσεις υποβολής
+        <textarea
+          value={submissionForm.user_notes}
+          onChange={(e) =>
+            setSubmissionForm({
+              ...submissionForm,
+              user_notes: e.target.value,
+            })
+          }
+        />
+      </label>
+
+      <button
+        className="save-hydrant-btn"
+        onClick={submitHydrantSuggestion}
+        disabled={savingSubmission}
+      >
+        {savingSubmission ? "Υποβολή..." : "Υποβολή για Έλεγχο"}
+      </button>
+    </div>
   </div>
 )}
   </div>
@@ -776,7 +1506,184 @@ return (
   Εμφανίζονται {filteredHydrants.length} από {hydrants.length} υδροστόμια
 </div>
         </div>
+{adminView === "statistics" ? (
+  <div className="statistics-dashboard">
+    <div className="stats-cards">
+      <div className="stats-card">
+        <span>Σύνολο Κρουνών</span>
+        <strong>{totalHydrants}</strong>
+      </div>
 
+      <div className="stats-card">
+        <span>Λειτουργικοί</span>
+        <strong>{workingHydrants}</strong>
+      </div>
+
+      <div className="stats-card">
+        <span>Με Πρόβλημα</span>
+        <strong>{problemHydrants}</strong>
+      </div>
+
+      <div className="stats-card">
+        <span>Εκτός Λειτουργίας</span>
+        <strong>{outOfServiceHydrants}</strong>
+      </div>
+    </div>
+
+    <div className="chart-box">
+      <h3>Κρουνοί ανά Δήμο</h3>
+      <ResponsiveContainer width="100%" height={420}>
+        <BarChart data={municipalityStats}>
+          <XAxis
+            dataKey="municipality"
+            angle={-45}
+            textAnchor="end"
+            height={90}
+            interval={0}
+            tick={{ fontSize: 11 }}
+          />
+          <YAxis />
+          <Tooltip />
+          <Bar dataKey="count" fill="#1591e8" />
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+
+    <div className="chart-grid">
+      <div className="chart-box">
+        <h3>Κατάσταση Κρουνών</h3>
+        <ResponsiveContainer width="100%" height={250}>
+          <PieChart>
+            <Pie
+              data={statusStats}
+              dataKey="value"
+              nameKey="name"
+              outerRadius={80}
+              label
+            >
+              {statusStats.map((_, index) => (
+                <Cell
+                  key={index}
+                  fill={["#22c55e", "#facc15", "#ef4444", "#94a3b8"][index % 4]}
+                />
+              ))}
+            </Pie>
+            <Tooltip />
+            <Legend />
+          </PieChart>
+        </ResponsiveContainer>
+      </div>
+
+      <div className="chart-box">
+        <h3>Σύνδεση Storz</h3>
+        <ResponsiveContainer width="100%" height={250}>
+          <PieChart>
+            <Pie
+              data={storzStats}
+              dataKey="value"
+              nameKey="name"
+              outerRadius={80}
+              label
+            >
+              {storzStats.map((_, index) => (
+                <Cell
+                  key={index}
+                  fill={["#1591e8", "#64748b"][index % 2]}
+                />
+              ))}
+            </Pie>
+            <Tooltip />
+            <Legend />
+          </PieChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  </div>
+) : adminView === "submissions" ? (
+  <div className="hydrants-table">
+    <div className="table-header submissions-header">
+        <span>ΗΜ/ΝΙΑ</span>
+        <span>ΤΥΠΟΣ</span>
+        <span>ΟΝΟΜΑ</span>
+        <span>ΔΗΜΟΣ</span>
+        <span>STATUS</span>
+        <span>ΕΝΕΡΓΕΙΕΣ</span>
+      </div>
+
+    {loadingSubmissions ? (
+  <div
+  className="table-row submissions-row">
+        <span>Φόρτωση υποβολών...</span>
+      </div>
+    ) : submissions.length === 0 ? (
+      <div
+  className="table-row submissions-row">
+        <span>Δεν υπάρχουν pending υποβολές.</span>
+      </div>
+    ) : (
+      submissions.map((submission) => (
+        <div
+            className="table-row"
+            key={submission.id}
+            onClick={async () => {
+            setSelectedSubmission(submission);
+
+            if (submission.type === "edit" && submission.hydrant_id) {
+              const { data, error } = await supabase
+                .from("hydrants")
+                .select("*")
+                .eq("id", submission.hydrant_id)
+                .single();
+
+              if (error) {
+                console.error(error);
+                alert("Απέτυχε η φόρτωση του αρχικού κρουνού.");
+                return;
+              }
+
+              setOriginalHydrant(data);
+            } else {
+              setOriginalHydrant(null);
+            }
+          }}
+          >
+          <span>
+            {new Date(submission.created_at).toLocaleDateString("el-GR")}
+          </span>
+          <span>{submission.type === "add" ? "Προσθήκη" : "Τροποποίηση"}</span>
+          <span>{submission.name ?? "-"}</span>
+          <span>{submission.municipality ?? "-"}</span>
+          <span>{submission.status ?? "-"}</span>
+          <span className="submission-actions">
+            <button
+              type="button"
+              className="quick-approve-btn"
+              disabled={reviewingSubmission}
+              onClick={(e) => {
+                e.stopPropagation();
+                approveSubmission(submission);
+              }}
+            >
+              ✓
+            </button>
+
+            <button
+              type="button"
+              className="quick-reject-btn"
+              disabled={reviewingSubmission}
+              onClick={(e) => {
+                e.stopPropagation();
+                rejectSubmission(submission);
+              }}
+            >
+              ×
+            </button>
+          </span>
+        </div>
+      ))
+    )}
+  </div>
+) : (
         <div className="hydrants-table">
           <div className="table-header">
             <span>ΔΙΕΥΘΥΝΣΗ</span>
@@ -816,22 +1723,124 @@ return (
             </div>
           ))}
         </div>
+        )}
       </aside>
+      {selectedSubmission && (
+  <div className="admin-panel">
+    <div className="admin-panel-header">
+      <strong>Έλεγχος Υποβολής</strong>
+      <button onClick={() => setSelectedSubmission(null)}>×</button>
+    </div>
+
+    <div className="admin-panel-body">
+      
+
+      {selectedSubmission.type === "edit" && originalHydrant && (
+  <div className="comparison-box">
+    <h4>Σύγκριση αλλαγών</h4>
+
+    {[
+      ["Όνομα", originalHydrant.name, selectedSubmission.name],
+      ["Δήμος", originalHydrant.municipality, selectedSubmission.municipality],
+      ["Κατάσταση", originalHydrant.status, selectedSubmission.status],
+      ["Storz", originalHydrant.hassstorz ? "Ναι" : "Όχι", selectedSubmission.hassstorz ? "Ναι" : "Όχι"],
+      ["Τελ. Έλεγχος", originalHydrant.lastinspection, selectedSubmission.lastinspection],
+      ["Σχόλια", originalHydrant.comments, selectedSubmission.comments],
+    ].map(([label, oldValue, newValue]) => {
+      const changed = String(oldValue ?? "-") !== String(newValue ?? "-");
+
+      return (
+        <div
+          key={label}
+          className={`change-card ${changed ? "changed" : "unchanged"}`}
+        >
+          <div className="change-label">{label}</div>
+
+          <div className="change-values">
+            <div>
+              <span className="value-title">Τρέχον</span>
+              <span className="old-value">{oldValue ?? "-"}</span>
+            </div>
+
+            <div className="arrow">→</div>
+
+            <div>
+              <span className="value-title">Προτεινόμενο</span>
+              <span className="new-value">{newValue ?? "-"}</span>
+            </div>
+          </div>
+        </div>
+      );
+    })}
+  </div>
+)}
+
+      <button
+        className="save-hydrant-btn"
+        disabled={reviewingSubmission}
+        onClick={() => approveSubmission(selectedSubmission)}
+      >
+        Έγκριση
+      </button>
+
+      <button
+        className="delete-hydrant-btn"
+        disabled={reviewingSubmission}
+        onClick={() => rejectSubmission(selectedSubmission)}
+      >
+        Απόρριψη
+      </button>
+    </div>
+  </div>
+)}
 
       <section className="map-panel">
         <div className="map-header">
-          <div className="map-tab">
+          <button
+            type="button"
+            className="map-tab map-tab-button"
+            onClick={() => {
+              setAdminView("management");
+              setNewHydrant(null);
+              setSelectedSubmission(null);
+            }}
+          >
             Χάρτης
-          </div>
+          </button>
 
-          {adminMode && (
-            <button
-              className="new-hydrant-map-btn"
-              onClick={startAddHydrant}
-            >
-              Νέος Κρουνός
-            </button>
-          )}
+          {isAdmin && (
+  <>
+    <button
+      type="button"
+      className="new-hydrant-map-btn"
+      onClick={() => {
+        setAdminView("management");
+        startAddHydrant();
+      }}
+    >
+      Νέος Κρουνός
+    </button>
+
+    <button
+      type="button"
+      className="submissions-map-btn"
+      onClick={() => setAdminView("submissions")}
+    >
+      Υποβολές
+      {submissions.length > 0 && (
+        <span className="submissions-badge">{submissions.length}</span>
+      )}
+    </button>
+
+    <button
+      type="button"
+      className="statistics-map-btn"
+      onClick={() => setAdminView("statistics")}
+    >
+      Στατιστικά
+    </button>
+  </>
+)}
         </div>
         <MapContainer
           center={[37.9838, 23.7275]}
@@ -882,6 +1891,19 @@ return (
                     Last inspection: {hydrant.lastinspection ?? "N/A"}
                     <br />
                     Comments: {hydrant.comments ?? "No comments"}
+
+                    {!session && (
+                    <>
+                      <br />
+                      <button
+                        type="button"
+                        className="suggest-edit-btn"
+                        onClick={() => openEditSuggestion(hydrant)}
+                      >
+                        Πρόταση τροποποίησης
+                      </button>
+                    </>
+                  )}
                   </Popup>
                 </Marker>
               ))}

@@ -1,73 +1,161 @@
-# React + TypeScript + Vite
+# HydrantsNearby Web
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Το **HydrantsNearby Web** είναι η web έκδοση της εφαρμογής
+**HydrantsNearby**, με στόχο την εύκολη προβολή, αναζήτηση και
+διαχείριση πυροσβεστικών κρουνών μέσω διαδραστικού χάρτη.
 
-Currently, two official plugins are available:
+Η εφαρμογή έχει σχεδιαστεί ώστε να μπορεί να υποστηρίξει υπηρεσίες
+Πολιτικής Προστασίας, πυροσβεστικές δυνάμεις και άλλους αρμόδιους φορείς
+στην εύρεση και παρακολούθηση πυροσβεστικών κρουνών.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Features
 
-## React Compiler
+-   Διαδραστικός χάρτης πυροσβεστικών κρουνών
+-   Προβολή θέσης και πληροφοριών κάθε κρουνού
+-   Αναζήτηση κρουνών
+-   Φιλτράρισμα βάσει κατάστασης
+-   Φιλτράρισμα ανά δήμο
+-   Φιλτράρισμα βάσει σύνδεσης Storz
+-   Marker clustering για καλύτερη απεικόνιση πολλών σημείων
+-   Εντοπισμός θέσης χρήστη
+-   Προβολή ημερομηνίας τελευταίου ελέγχου και σχολίων
+-   Διαχειριστικό περιβάλλον για προσθήκη και επεξεργασία δεδομένων
+-   Αποθήκευση και ανάκτηση δεδομένων μέσω Supabase
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Technologies
 
-## Expanding the ESLint configuration
+Το project χρησιμοποιεί:
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+-   React
+-   TypeScript
+-   Vite
+-   Supabase
+-   Leaflet
+-   React Leaflet
+-   React Leaflet Cluster
+-   React Router
+-   Recharts
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+## Project Structure
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+``` text
+hydrants-nearby-web/
+├── public/
+├── scripts/
+├── src/
+├── index.html
+├── package.json
+├── tsconfig.json
+├── vite.config.ts
+└── README.md
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## Installation
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+Απαιτείται εγκατεστημένο **Node.js**.
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+Κλωνοποίηση του repository:
+
+``` bash
+git clone https://github.com/antonylampidakis/hydrants-nearby-web.git
 ```
+
+Μετάβαση στον φάκελο του project:
+
+``` bash
+cd hydrants-nearby-web
+```
+
+Εγκατάσταση dependencies:
+
+``` bash
+npm install
+```
+
+## Environment Variables
+
+Η εφαρμογή χρησιμοποιεί **Supabase** και απαιτεί τις αντίστοιχες
+environment variables.
+
+Δημιουργήστε ένα αρχείο `.env` στον βασικό φάκελο του project και ορίστε
+τις μεταβλητές που χρησιμοποιεί η εφαρμογή.
+
+Παράδειγμα:
+
+``` env
+VITE_SUPABASE_URL=your_supabase_url
+VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+```
+
+> Μην αποθηκεύετε passwords, service-role keys ή άλλα πραγματικά secrets
+> στο GitHub.
+
+## Development
+
+Εκτέλεση της εφαρμογής σε development mode:
+
+``` bash
+npm run dev
+```
+
+## Production Build
+
+Δημιουργία production build:
+
+``` bash
+npm run build
+```
+
+Τοπικό preview του production build:
+
+``` bash
+npm run preview
+```
+
+## Database
+
+Τα δεδομένα των πυροσβεστικών κρουνών αποθηκεύονται στο Supabase.
+
+Οι εγγραφές μπορούν να περιλαμβάνουν στοιχεία όπως:
+
+-   Όνομα κρουνού
+-   Γεωγραφικό πλάτος και μήκος
+-   Κατάσταση λειτουργίας
+-   Δήμος
+-   Ύπαρξη σύνδεσης Storz
+-   Ημερομηνία τελευταίου ελέγχου
+-   Σχόλια
+
+Η πρόσβαση και η διαχείριση των δεδομένων πρέπει να προστατεύονται μέσω
+των κατάλληλων μηχανισμών authentication και Row Level Security (RLS)
+policies του Supabase.
+
+## Deployment
+
+Η εφαρμογή είναι Vite/React web application και μπορεί να γίνει deploy
+σε συμβατή υπηρεσία hosting.
+
+Το GitHub repository χρησιμοποιείται ως πηγαίος κώδικας της web
+εφαρμογής και μπορεί να συνδεθεί με την υπηρεσία deployment για
+αυτόματες νέες εκδόσεις μετά από αλλαγές στο repository.
+
+## Security
+
+-   Δεν πρέπει να αποθηκεύονται passwords ή private/service-role keys
+    μέσα στο repository.
+-   Τα deployment environment variables πρέπει να ορίζονται στην
+    υπηρεσία hosting.
+-   Οι λειτουργίες διαχείρισης πρέπει να προστατεύονται με
+    authentication.
+-   Τα δικαιώματα ανάγνωσης και εγγραφής στη βάση πρέπει να ελέγχονται
+    μέσω Supabase RLS policies.
+-   Το `.env` πρέπει να παραμένει εκτός Git μέσω του `.gitignore`.
+
+## Project
+
+**HydrantsNearby**
+
+Web εφαρμογή για προβολή, αναζήτηση και διαχείριση πυροσβεστικών
+κρουνών.
+
+Developed by **Antony Lampidakis**
